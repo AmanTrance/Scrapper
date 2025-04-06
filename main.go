@@ -52,7 +52,7 @@ rabbitRetry:
 		goto rabbitRetry
 	}
 
-	var cronChannel chan any = make(chan any, 1000)
+	var cronChannel chan *structs.Jobber = make(chan *structs.Jobber, 1000)
 
 	cronEngine, err := croner.NewCronEngine(cronChannel, rabbitClient, postgresClient)
 	if err != nil {

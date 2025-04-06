@@ -3,14 +3,15 @@ package handlers
 import (
 	"database/sql"
 	"net/http"
+	"scraper/structs"
 )
 
 type Handler struct {
 	postgres    *sql.DB
-	cronChannel chan<- any
+	cronChannel chan<- *structs.Jobber
 }
 
-func NewHandler(postgres *sql.DB, cronChannel chan<- any) *Handler {
+func NewHandler(postgres *sql.DB, cronChannel chan<- *structs.Jobber) *Handler {
 
 	var handler Handler = Handler{postgres, cronChannel}
 

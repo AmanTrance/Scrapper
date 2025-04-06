@@ -9,16 +9,17 @@ const (
 
 type JobberType uint8
 
-type HTTPRequestDTO struct {
-	URL     string         `json:"url"`
-	Method  string         `json:"method"`
-	Headers http.Header    `json:"headers"`
-	Body    map[string]any `json:"body"`
+type HTTPRequest struct {
+	URL     string      `json:"url"`
+	Method  string      `json:"method"`
+	Headers http.Header `json:"headers"`
+	Body    []byte      `json:"body"`
 }
 
 type Jobber struct {
-	Type            JobberType
-	QueueName       string
-	Payload         *HTTPRequestDTO
-	ResponseChannel chan<- any
+	Type         JobberType
+	Cron         string
+	QueueName    string
+	ExchangeName string
+	Payload      *HTTPRequest
 }
