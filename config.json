@@ -1,3 +1,6 @@
 {
-    
+    "rabbit_url": "",
+    "postgres_url": "",
+    "server_port": "",
+    "exchange": ""
 }

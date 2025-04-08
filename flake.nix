@@ -2,7 +2,9 @@
   description = "Cron Scrapper";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-24.11";
+    nixpkgs = { 
+      url = "github:nixos/nixpkgs?ref=nixos-24.11";
+    };
   };
 
   outputs = { self, nixpkgs }:
@@ -11,9 +13,9 @@
         "x86_64-linux"
       ];
 
-      forAllSystems = f: nixpkgs.lib.genAttrs allSystems (system: f {
+      forAllSystems = (f: nixpkgs.lib.genAttrs allSystems (system: f {
         pkgs = import nixpkgs { inherit system; };
-      });
+      }));
     in
     {
       packages = forAllSystems ({ pkgs }: {

@@ -6,13 +6,12 @@ func Migrate(postgres *sql.DB) error {
 
 	_, err := postgres.Exec(`
 		CREATE TABLE IF NOT EXISTS cron_details (
-			id TEXT PRIMARY KEY,
+			queue_id TEXT PRIMARY KEY,
 			created_at TIMESTAMP DEFAULT NOW(),
 			updated_at TIMESTAMP,
 			job_id TEXT,
 			cron TEXT,
 			job_payload TEXT,
-			queue_name TEXT,
 			exchange_name TEXT
 		);
 	`)

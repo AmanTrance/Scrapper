@@ -5,6 +5,7 @@ import "net/http"
 const (
 	ADD    JobberType = 0
 	DELETE JobberType = 1
+	UPDATE JobberType = 2
 )
 
 type JobberType uint8

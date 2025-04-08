@@ -35,6 +35,7 @@ func main() {
 postgresRetry:
 	postgresClient, err := sql.Open("postgres", config.PostgresURL)
 	if err != nil {
+		log.Default().Println(err.Error())
 		time.Sleep(time.Minute)
 		goto postgresRetry
 	}
@@ -42,11 +43,12 @@ postgresRetry:
 rabbitRetry:
 	rabbitClient, err := rabbit.NewRabbitMQClient(&config)
 	if err != nil {
+		log.Default().Println(err.Error())
 		time.Sleep(time.Minute)
 		goto rabbitRetry
 	}
 
-	err = rabbit.SetupExchanges(rabbitClient, config.Exchanges)
+	err = rabbit.SetupExchanges(rabbitClient, config.Exchange)
 	if err != nil {
 		time.Sleep(time.Minute)
 		goto rabbitRetry
@@ -63,12 +65,12 @@ rabbitRetry:
 		cronEngine.Run(systemContext)
 	}()
 
-	var handler *handlers.Handler = handlers.NewHandler(postgresClient, cronChannel)
+	var handler *handlers.Handler = handlers.NewHandler(postgresClient, cronChannel, &config)
 
 	http.HandleFunc("/api/v1/add", handler.AddScraper())
-	// http.HandleFunc("/api/v1/update", handler.UpdateScraper())
-	// http.HandleFunc("/api/v1/delete", handler.DeleteScraper())
-	// http.HandleFunc("/api/v1/list", handler.ListScrapers())
+	http.HandleFunc("/api/v1/update", handler.UpdateScraper())
+	http.HandleFunc("/api/v1/delete", handler.DeleteScraper())
+	http.HandleFunc("/api/v1/list", handler.ListScrapers())
 
 	var server http.Server = http.Server{Addr: ":9000", Handler: http.DefaultServeMux}
 

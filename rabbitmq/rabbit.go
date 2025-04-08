@@ -33,14 +33,11 @@ func NewRabbitMQClient(config *structs.Config) (*amqp.Channel, error) {
 	return channel, nil
 }
 
-func SetupExchanges(r *amqp.Channel, exchanges []string) error {
+func SetupExchanges(r *amqp.Channel, exchange string) error {
 
-	for _, e := range exchanges {
-
-		err := r.ExchangeDeclare(string(e), DIRECT, true, false, false, false, nil)
-		if err != nil {
-			return err
-		}
+	err := r.ExchangeDeclare(exchange, DIRECT, true, false, false, false, nil)
+	if err != nil {
+		return err
 	}
 
 	return nil

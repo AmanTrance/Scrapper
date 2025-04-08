@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	rabbit "scraper/rabbitmq"
 	"scraper/structs"
@@ -54,54 +55,62 @@ looper:
 			case structs.ADD:
 				jobPayload, err := json.Marshal(job.Payload)
 				if err != nil {
+					log.Default().Println(err.Error())
 					break
 				}
 
 				base64Payload := base64.StdEncoding.EncodeToString(jobPayload)
-				id := uuid.NewString()
 
 				_, err = engine.postres.Exec(`
-					INSERT INTO cron_details (id, cron, job_payload, queue_name, exchange_name) VALUES (
+					INSERT INTO cron_details (queue_id, cron, job_payload, exchange_name) VALUES (
 						$1, $2, $3, $4
 					)
-				`, &id, &job.Cron, &base64Payload, &job.QueueName, &job.ExchangeName)
+				`, &job.QueueName, &job.Cron, &base64Payload, &job.ExchangeName)
 
 				if err != nil {
+					log.Default().Println(err.Error())
 					break
 				}
 
-				_, err = engine.scheduler.NewJob(gocron.CronJob(job.Cron, false), gocron.NewTask(func() {
+				j, err := engine.scheduler.NewJob(gocron.CronJob(job.Cron, false), gocron.NewTask(func() {
 					rows, err := engine.postres.Query(`
-						SELECT job_payload, queue_name, exchange_name FROM cron_details WHERE id = $1
-					`, &id)
+						SELECT job_payload, exchange_name FROM cron_details WHERE id = $1
+					`, &job.QueueName)
 
 					if err != nil {
+						log.Default().Println(err.Error())
 						return
 					}
 
-					defer rows.Close()
-
 					var payload string
-					var queueName string
 					var exchangeName string
 
 					if rows.Next() {
-						_ = rows.Scan(&payload, &queueName, &exchangeName)
+						_ = rows.Scan(&payload, &exchangeName)
+					} else {
+						rows.Close()
+						return
 					}
 
 					bytesPayload, err := base64.StdEncoding.DecodeString(payload)
 					if err != nil {
+						log.Default().Println(err.Error())
+						rows.Close()
 						return
 					}
 
 					var request structs.HTTPRequest
 					err = json.Unmarshal(bytesPayload, &request)
 					if err != nil {
+						log.Default().Println(err.Error())
+						rows.Close()
 						return
 					}
 
 					newHTTPRequest, err := http.NewRequest(request.Method, request.URL, bytes.NewBuffer(request.Body))
 					if err != nil {
+						log.Default().Println(err.Error())
+						rows.Close()
 						return
 					}
 
@@ -109,27 +118,185 @@ looper:
 
 					response, err := http.DefaultClient.Do(newHTTPRequest)
 					if err != nil {
+						log.Default().Println(err.Error())
+						rows.Close()
 						return
 					}
 
 					responseBytes, err := io.ReadAll(response.Body)
 					if err != nil {
+						log.Default().Println(err.Error())
+						rows.Close()
 						return
 					}
 
-					err = rabbit.SendMessageToSpecificExchange(engine.rabbitChannel, &rabbit.Message{Exchange: exchangeName, QueueName: queueName,
+					err = rabbit.SendMessageToSpecificExchange(engine.rabbitChannel, &rabbit.Message{Exchange: exchangeName, QueueName: job.QueueName,
 						ContentType: response.Header.Get("Content-Type"), ActualData: responseBytes})
 					if err != nil {
+						log.Default().Println(err.Error())
+						rows.Close()
 						return
 					}
 				}))
 
 				if err != nil {
+					log.Default().Println(err.Error())
+					break
+				}
+
+				_, err = engine.postres.Exec(`
+					UPDATE cron_details SET job_id = $1 WHERE queue_id = $2
+				`, j.ID().String(), &job.QueueName)
+
+				if err != nil {
+					log.Default().Println(err.Error())
 					break
 				}
 
 			case structs.DELETE:
+				rows, err := engine.postres.Query(`
+					SELECT job_id FROM cron_details WHERE queue_id = $1
+				`, &job.QueueName)
 
+				if err != nil {
+					log.Default().Println(err.Error())
+					break
+				}
+
+				var jobID string
+
+				if rows.Next() {
+					_ = rows.Scan(&jobID)
+				} else {
+					rows.Close()
+					break
+				}
+
+				jobUUID, err := uuid.Parse(jobID)
+				if err != nil {
+					log.Default().Println(err.Error())
+					break
+				}
+
+				err = engine.scheduler.RemoveJob(jobUUID)
+				if err != nil {
+					log.Default().Println(err.Error())
+					break
+				}
+
+			case structs.UPDATE:
+				rows, err := engine.postres.Query(`
+					SELECT job_id FROM cron_details WHERE queue_id = $1
+				`, &job.QueueName)
+
+				if err != nil {
+					log.Default().Println(err.Error())
+					break
+				}
+
+				var jobID string
+
+				if rows.Next() {
+					_ = rows.Scan(&jobID)
+				} else {
+					rows.Close()
+					break
+				}
+
+				jobUUID, err := uuid.Parse(jobID)
+				if err != nil {
+					log.Default().Println(err.Error())
+					break
+				}
+
+				jobPayload, err := json.Marshal(job.Payload)
+				if err != nil {
+					log.Default().Println(err.Error())
+					break
+				}
+
+				base64Payload := base64.StdEncoding.EncodeToString(jobPayload)
+
+				_, err = engine.postres.Exec(`
+					UPDATE cron_details SET cron = $1, cron_payload = $2, updated_at = NOW() WHERE queue_id = $3
+				`, &job.Cron, &base64Payload, &job.QueueName)
+
+				if err != nil {
+					log.Default().Println(err.Error())
+					break
+				}
+
+				_, err = engine.scheduler.Update(jobUUID, gocron.CronJob(job.Cron, false), gocron.NewTask(func() {
+					rows, err := engine.postres.Query(`
+						SELECT job_payload, exchange_name FROM cron_details WHERE id = $1
+					`, &job.QueueName)
+
+					if err != nil {
+						log.Default().Println(err.Error())
+						return
+					}
+
+					var payload string
+					var exchangeName string
+
+					if rows.Next() {
+						_ = rows.Scan(&payload, &exchangeName)
+					} else {
+						rows.Close()
+						return
+					}
+
+					bytesPayload, err := base64.StdEncoding.DecodeString(payload)
+					if err != nil {
+						log.Default().Println(err.Error())
+						rows.Close()
+						return
+					}
+
+					var request structs.HTTPRequest
+					err = json.Unmarshal(bytesPayload, &request)
+					if err != nil {
+						log.Default().Println(err.Error())
+						rows.Close()
+						return
+					}
+
+					newHTTPRequest, err := http.NewRequest(request.Method, request.URL, bytes.NewBuffer(request.Body))
+					if err != nil {
+						log.Default().Println(err.Error())
+						rows.Close()
+						return
+					}
+
+					newHTTPRequest.Header = request.Headers
+
+					response, err := http.DefaultClient.Do(newHTTPRequest)
+					if err != nil {
+						log.Default().Println(err.Error())
+						rows.Close()
+						return
+					}
+
+					responseBytes, err := io.ReadAll(response.Body)
+					if err != nil {
+						log.Default().Println(err.Error())
+						rows.Close()
+						return
+					}
+
+					err = rabbit.SendMessageToSpecificExchange(engine.rabbitChannel, &rabbit.Message{Exchange: exchangeName, QueueName: job.QueueName,
+						ContentType: response.Header.Get("Content-Type"), ActualData: responseBytes})
+					if err != nil {
+						log.Default().Println(err.Error())
+						rows.Close()
+						return
+					}
+				}))
+
+				if err != nil {
+					log.Default().Println(err.Error())
+					break
+				}
 			}
 
 		case <-context.Done():
