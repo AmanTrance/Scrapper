@@ -74,7 +74,7 @@ looper:
 
 				j, err := engine.scheduler.NewJob(gocron.CronJob(job.Cron, false), gocron.NewTask(func() {
 					rows, err := engine.postres.Query(`
-						SELECT job_payload, exchange_name FROM cron_details WHERE id = $1
+						SELECT job_payload, exchange_name FROM cron_details WHERE queue_id = $1
 					`, &job.QueueName)
 
 					if err != nil {

@@ -4,12 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"scraper/croner"
 	"scraper/handlers"
+	"scraper/migration"
 	rabbit "scraper/rabbitmq"
 	"scraper/structs"
 	"syscall"
@@ -38,6 +40,11 @@ postgresRetry:
 		log.Default().Println(err.Error())
 		time.Sleep(time.Minute)
 		goto postgresRetry
+	}
+
+	err = migration.Migrate(postgresClient)
+	if err != nil {
+		log.Default().Fatal(err.Error())
 	}
 
 rabbitRetry:
@@ -72,7 +79,7 @@ rabbitRetry:
 	http.HandleFunc("/api/v1/delete", handler.DeleteScraper())
 	http.HandleFunc("/api/v1/list", handler.ListScrapers())
 
-	var server http.Server = http.Server{Addr: ":9000", Handler: http.DefaultServeMux}
+	var server http.Server = http.Server{Addr: fmt.Sprintf(":%d", config.ServerPort), Handler: http.DefaultServeMux}
 
 	go func() {
 		err = server.ListenAndServe()
