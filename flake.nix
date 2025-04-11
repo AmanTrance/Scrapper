@@ -1,5 +1,5 @@
 {
-  description = "Cron Scrapper";
+  description = "Cron Scraper";
 
   inputs = {
     nixpkgs = { 
@@ -9,11 +9,11 @@
 
   outputs = { self, nixpkgs }:
     let
-      allSystems = [
+      systems = [
         "x86_64-linux"
       ];
 
-      forAllSystems = (f: nixpkgs.lib.genAttrs allSystems (system: f {
+      forAllSystems = (f: nixpkgs.lib.genAttrs systems (system: f {
         pkgs = import nixpkgs { inherit system; };
       }));
     in
@@ -23,7 +23,9 @@
           name = "scraper";
           src = self;
           vendorHash = "sha256-EEzNj22RvQF8mO0R/stydHltbRzHkzPixnH7+r9y5+o=";
-          subPackages = [ "./" ];
+          subPackages = [ 
+            "./" 
+          ];
         };
       });
     };
